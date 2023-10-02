@@ -1,8 +1,8 @@
+<!DOCTYPE html>
 {% load static %}
-
+<!-- {% static 'path' %} -->
 
 <html lang="en">
-
 <head>
     <!-- Required meta tags -->
     <meta charset="utf-8">
@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css?family=Muli:300,700&display=swap" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="{% static 'video_tiktok/css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'video_tiktok/css/style/style.css' %}">
 
 
     <!-- Ionic icons -->
@@ -35,13 +35,13 @@
             <div class="logo">
                 <h4 class="text-light font-weight-bold mb-0">VRLabs</h4>
             </div>
-            <div class="d-flex justify-content-center mt-3">
+            <!--<div class="d-flex justify-content-center mt-3">
                 <form class="form-inline position-relative my-2">
                 <input class="form-control" type="search" placeholder="Buscar" aria-label="Buscar">
                 <button class="btn position-absolute btn-search" type="submit"><i class="icon ion-md-search"></i></button>
             </form>
 
-            </div>
+            </div>-->
 
             <div class="menu">
                 <a href="#" class="d-block text-light p-3 border-0"><ion-icon name="videocam" class="mr-3 lead"></ion-icon> Estudio</a>
@@ -73,8 +73,8 @@
                   <li class="nav-item dropdown">
                     <a class="nav-link text-dark dropdown-toggle" href="#" id="navbarDropdown" role="button"
                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                      <img src="{% static 'video_tiktok/img/user-1.png' %}" class="img-fluid rounded-circle avatar mr-2"
-                           alt="https://generated.photos/" />Juan Pérez
+                      <img src="{% static 'video_tiktok/img/user/user-1.png' %}" class="img-fluid rounded-circle avatar mr-2"
+                           alt="" />Juan Pérez
                     </a>
                     <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown">
                       <a class="dropdown-item" href="#">Mi perfil</a>
@@ -116,15 +116,19 @@
                                   </div>
                                   <div class="card-body text-center">
                                     <video width="270" height="480" controls>
-                                    <source src="{% static 'video_tiktok/videos/tu_video.mp4' %}" type="video/mp4">
+                                    <source src="{% static 'video_tiktok/videos/generated_videos/video_final.mp4' %}" type="video/mp4">
+
+
                                     Tu navegador no soporta la etiqueta de video.
                                     </video>
 
                                   </div>
                                   <!-- Botones debajo del reproductor de video -->
                                   <div class="mt-3 mb-3 d-flex justify-content-center">
-                                      <button class="btn btn-secondary mr-2">Intentar de nuevo</button>
-                                      <button class="btn btn-primary">Descargar video</button>
+                                      <button class="btn btn-secondary mr-2" onclick="handleButtonClick()">Intentar de nuevo</button>
+                                      <!-- <button class="btn btn-primary">Descargar video</button> -->
+                                      <a href="{% static 'video_tiktok/videos/generated_videos/video_final.mp4' %}" download class="btn btn-primary">Descargar video</a>
+
                                   </div>
                                   <div class="py-2 bg-light"> <!-- Añadido padding al footer -->
                                   </div>
@@ -140,6 +144,7 @@
                                         <div class="row">
                                             <div class="col-12">
                                                 <form id="scriptForm">
+                                                    {% csrf_token %}
                                                     <div class="form-group">
                                                         <label for="videoTitle">Título del Video</label>
                                                         <input type="text" class="form-control" id="videoTitle" placeholder="Escribe el título del video">
@@ -153,10 +158,32 @@
                                                 </form>
                                                 <div class="form-group mt-4">
                                                     <label for="generatedScript">Guion Generado</label>
-                                                    <textarea class="form-control" id="generatedScript" rows="3" readonly></textarea>
+                                                    <textarea class="form-control" id="generatedScript" rows="3"></textarea>
                                                 </div>
+                                                <button type="button" class="btn btn-primary" onclick="generateImages()">Confirmar cambios</button>
+
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div id="imagesContainer">
+                                        <!-- Miniaturas
+                                        <div class="thumbnails">
+                                            <img src="{% static 'video_tiktok/img/generated_images/imagen_0_thumbnail.png' %}" alt="Imagen 0" class="thumbnail" data-large="{% static 'video_tiktok/img/generated_images/imagen_0_thumbnail.png' %}">
+                                            <img src="{% static 'video_tiktok/img/generated_images/imagen_1_thumbnail.png' %}" alt="Imagen 1" class="thumbnail" data-large="{% static 'video_tiktok/img/generated_images/imagen_1_thumbnail.png' %}">
+                                            <img src="{% static 'video_tiktok/img/generated_images/imagen_2_thumbnail.png' %}" alt="Imagen 2" class="thumbnail" data-large="{% static 'video_tiktok/img/generated_images/imagen_2_thumbnail.png' %}">
+                                            <img src="{% static 'video_tiktok/img/generated_images/imagen_3_thumbnail.png' %}" alt="Imagen 3" class="thumbnail" data-large="{% static 'video_tiktok/img/generated_images/imagen_3_thumbnail.png' %}">
+
+                                        </div> -->
+
+                                        <!-- Modal para la imagen en tamaño grande
+                                        <div id="modal" class="modal">
+                                            <span class="close" onclick="document.getElementById('modal').style.display='none'">&times;</span>
+                                            <img class="modal-content" id="largeImage">
+                                            <div id="caption"></div>
+                                        </div> -->
+
+
                                     </div>
 
                                     <div class="form-group">
@@ -167,7 +194,8 @@
                                         </select>
                                     </div>
                                     <div class="d-flex justify-content-center mt-3">
-                                        <button class="btn btn-primary w-50">Generar video</button
+                                        <button id="generateVideoBtn" class="btn btn-primary w-50">Generar video</button>
+
                                     </div>
                                 </div>
                             </div>
@@ -187,15 +215,152 @@
 
      <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+    <!--<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
         integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
-        crossorigin="anonymous"></script>
+        crossorigin="anonymous"></script>-->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
         integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
         crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
         integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
         crossorigin="anonymous"></script>
+
+    <script>
+    function generateScript() {
+        //Obtener los valores de los campos de entrada
+        const title = $('#videoTitle').val();
+        const script = $('#videoScript').val();
+
+
+        //Enviar una solicitud POST a tu endpoint de Django para generar el guion -->
+        $.ajax({
+            type: 'POST',
+            url: '{% url "generate_script" %}',
+            data: {
+                videoTitle: title,
+                videoScript: script,
+                csrfmiddlewaretoken: $('input[name=csrfmiddlewaretoken]').val()
+                },
+            dataType: 'json',
+            success: function (response) {
+                $('#generatedScript').val(response.generated_script);
+                },
+            error: function (error) {
+                console.log(error);
+                }
+
+            });
+        }
+    </script>
+<script>
+    function generateImages() {
+        // Obtener el valor del guion generado, que el usuario puede haber editado
+        const editedScript = $('#generatedScript').val();
+
+        // Enviar una solicitud POST a tu endpoint de Django para generar las imágenes
+        $.ajax({
+            type: 'POST',
+            url: '{% url "generate_images" %}',
+            data: {
+                editedScript: editedScript,
+                csrfmiddlewaretoken: $('input[name=csrfmiddlewaretoken]').val()
+            },
+            dataType: 'json',
+            success: function (response) {
+                console.log(response);
+                // Limpiar cualquier imagen anteriormente mostrada
+                $('#imagesContainer').empty();
+
+                // Verificar si la respuesta contiene las rutas de las imágenes
+                if (response.imagePaths && response.imagePaths.length > 0) {
+                    // Iterar sobre las rutas de las imágenes y mostrarlas en la página
+                    response.imagePaths.forEach(function(imageObject) {
+                        console.log(imageObject); // Imprime el valor de imageObject
+
+                        // Agregar timestamp para evitar problemas de caché
+                        //const timestamp = new Date().getTime();
+
+                        // Accede a las propiedades image y thumbnail del objeto
+                        //const imagePath = imageObject.image;
+                        //const thumbnailPath = imageObject.thumbnail;
+                        //const thumbnailPath = imageObject.thumbnail + '?' + timestamp;
+
+                        // Crear un elemento de imagen
+                        const img = $('<img />', {
+                            src: imagePath,
+                            alt: 'Imagen generada'
+                        });
+
+                        // Crear un elemento de miniatura
+                        //const thumbnail = $('<img />', {
+                        //    src: thumbnailPath,
+                        //    alt: 'Miniatura'
+                        //});
+
+                        // Añadir el elemento de imagen y de miniatura al contenedor de imágenes
+                        //$('#imagesContainer').append(thumbnail);
+                        $('#imagesContainer').append(img);
+                    });
+                } else {
+                    // Mostrar un mensaje si no se encontraron imágenes
+                    console.log('No se generaron imágenes');
+                }
+            },
+            error: function (error) {
+                console.log(error);
+            }
+        });
+    }
+    document.addEventListener("DOMContentLoaded", function() {
+        // guardado en blog de notas
+    });
+
+</script>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    $("#generateVideoBtn").click(function() {
+        $.ajax({
+            type: "POST",
+            url: "/generate_video/",
+            data: {
+                csrfmiddlewaretoken: "{{ csrf_token }}"
+            },
+            success: function(response) {
+                // Aquí puedes manejar la respuesta, por ejemplo, mostrar un mensaje de éxito
+                alert("Video generado con éxito!");
+            },
+            error: function(error) {
+                // Manejo de errores
+                alert("Hubo un problema al generar el video.");
+            }
+        });
+    });
+});
+</script>
+
+<script>
+    function handleButtonClick() {
+    $.ajax({
+        type: "POST",
+        url: "/delete_video/",
+        data: {
+            'video_path': 'ruta/del/video/final_video.mp4',
+            'csrfmiddlewaretoken': '{{ csrf_token }}'
+        },
+        success: function(response) {
+            if (response.success) {
+                alert('Video eliminado exitosamente!');
+            } else {
+                alert('Error al eliminar el video.');
+            }
+        }
+    });
+}
+
+</script>
+
 
 </body>
 

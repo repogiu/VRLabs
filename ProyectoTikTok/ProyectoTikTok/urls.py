@@ -17,9 +17,21 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from video_tiktok.views import index
+from video_tiktok import views
+from django.conf import settings  # Importar settings
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    #path('video_tiktok/', index),
-    path('', index),
+    path('', views.index, name='index'),
+    path('generate_script/', views.generate_script, name='generate_script'),
+    path('generate_images/', views.generate_images, name='generate_images'),
+    path('generate_video/', views.generate_video, name='generate_video'),
+    path('delete_video/', views.delete_video, name='delete_video'),
+
 ]
+
+# Esto es solo necesario cuando DEBUG = True:
+# Django agregará las rutas para servir los archivos estáticos automáticamente
+if settings.DEBUG:
+    urlpatterns += staticfiles_urlpatterns()
