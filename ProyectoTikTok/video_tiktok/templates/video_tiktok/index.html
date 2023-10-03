@@ -162,6 +162,19 @@
                                                 </div>
                                                 <button type="button" class="btn btn-primary" onclick="generateImages()">Confirmar cambios</button>
 
+                                                <!-- Modal generando imagenes -->
+                                                <div class="modal" tabindex="-1" id="progressModal">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Generando Imágenes</h5>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <p id="progressText">Iniciando proceso...</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -258,6 +271,11 @@
         // Obtener el valor del guion generado, que el usuario puede haber editado
         const editedScript = $('#generatedScript').val();
 
+        // Modal
+
+        $("#progressModal").modal('show');
+        $("#progressText").text("Generando imágenes...");
+
         // Enviar una solicitud POST a tu endpoint de Django para generar las imágenes
         $.ajax({
             type: 'POST',
@@ -271,6 +289,9 @@
                 console.log(response);
                 // Limpiar cualquier imagen anteriormente mostrada
                 $('#imagesContainer').empty();
+
+                // una vez que recibas las imágenes o un error, oculta el modal:
+                $("#progressModal").modal('hide');
 
                 // Verificar si la respuesta contiene las rutas de las imágenes
                 if (response.imagePaths && response.imagePaths.length > 0) {
@@ -301,13 +322,30 @@
                         // Añadir el elemento de imagen y de miniatura al contenedor de imágenes
                         //$('#imagesContainer').append(thumbnail);
                         $('#imagesContainer').append(img);
+
                     });
+
+                    // Luego de que todas las imágenes se han agregado:
+                    // La función $("#progressText").text("...");
+                    // selecciona el elemento con el ID progressText
+                    // (que se encuentra dentro de tu modal) y
+                    // cambia su contenido de texto al valor que le pasa entre paréntesis,
+                    // en este caso "Imágenes generadas con éxito!".
+                    $("#progressText").text("Imágenes generadas con éxito!");
+
+                    //  el modal se ocultará automáticamente después de 2 segundos.
+                    setTimeout(function() {
+                        $('#progressModal').modal('hide');
+                    }, 2000); // 2000 milisegundos = 2 segundos
+
+
                 } else {
                     // Mostrar un mensaje si no se encontraron imágenes
                     console.log('No se generaron imágenes');
                 }
             },
             error: function (error) {
+                $("#progressModal").modal('hide');
                 console.log(error);
             }
         });
