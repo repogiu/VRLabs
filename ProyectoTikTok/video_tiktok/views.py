@@ -7,13 +7,19 @@ from django.conf import settings
 from django.http import JsonResponse
 from ProyectoTikTok.config import OPENAI_API_KEY
 import openai
+
 # Librerias para descargar imagenes
 import requests
 from PIL import Image  # libreria pillow para miniaturas de imagenes
 import os
 import base64
 # Librerias para generacion de video
-from moviepy.editor import concatenate_videoclips, ImageClip
+from moviepy.editor import ImageClip, concatenate_videoclips
+from moviepy.video import fx as vfx
+from moviepy.video.compositing import transitions
+import random
+from moviepy.editor import *
+
 
 
 # pip install moviepy
@@ -33,23 +39,66 @@ def generate_script(request):
         title = request.POST.get('videoTitle')
         script = request.POST.get('videoScript')
 
-        # Aquí llamarias a la API de OpenAI con los datos recibidos
+        # Prompt por defecto
+
+        default_prompt = ("Genera un guión titulado 'Guion:', de 90 segundos para un video que será narrado "
+                          "por una voz, en off el guión debe ser creativo y llamativo para el escuchante. El "
+                          "tema del guion es:  ")
+
+        prompt2 = (" El guión debe durar exactamente 90 segundos y estar en voz pasiva con un tono "
+                   "informativo. No debe contener ninguna etiqueta, ni mencionar cómo se conformará la "
+                   "escena en términos de imágenes, videos, música o transiciones. Después del guión, escribe "
+                   "'Prompts para Dall-E:', y genera una lista de 10 prompts para Dall-e que permitan crear 10 "
+                   "imágenes relacionadas al tema del guión. Estos prompts deben estar diseñados como si un "
+                   "profesional experto en herramientas de generación de imágenes con inteligencia artificial "
+                   "los hubiera hecho. Deben ser impresionantes y profesionales. La secuencia de los 10 prompts "
+                   "debe coincidir con la narrativa del guión y contener especificaciones técnicas que los "
+                   "profesionales usarían para generar imágenes. Evita usar palabras como genera, crea, haz, "
+                   "diseña y otros verbos al inicio de los prompts.Todos los resultados de los prompts deben"
+                   " tener una resolución de 1080x1920 ")
+
+        # Clave API
         openai.api_key = OPENAI_API_KEY
 
-        tema = title + " " + script
+        tema = default_prompt + " " + script + " " + prompt2
         print("Longitud del prompt:", len(tema))
 
         resultado = openai.Completion.create(
             engine="text-davinci-003",
             prompt=tema,
-            max_tokens=1000,
+            max_tokens=2048,
             temperature=0.8  # indica creatividad del modelo
         )
 
         # Accede al texto generado en la respuesta
-        generated_script = resultado.choices[0].text.strip()
+        generated_response = resultado.choices[0].text.strip()
+        print(generated_response)
 
-    return JsonResponse({'generated_script': generated_script})
+        # Buscamos el delimitador "Prompts para Dall-E:" para dividir la respuesta
+        delimiter = "Prompts para Dall-E:"
+        if delimiter in generated_response:
+            parts = generated_response.split(delimiter, 1)
+
+            # La primera parte contendrá el guion
+            script_to_show = parts[0].replace("Guion:", "").strip()
+            script_to_show = script_to_show.replace("Guión:", "").strip()
+
+            # La segunda parte contendrá los prompts
+            image_prompts = parts[1].strip().split('\n')
+        else:
+            # Manejo del caso donde el delimitador no se encuentra
+            # Podrías, por ejemplo, devolver un error o procesar la respuesta de alguna otra manera
+            script_to_show = "Error: No se encontró el delimitador en la respuesta."
+            image_prompts = []
+
+        # El guión para mostrar al usuario estará en la primera parte
+        # generated_script = parts[0].strip()
+
+        # Las descripciones para las imágenes estarán en la segunda parte
+        # image_prompts = parts[1].strip().split('\n')
+
+    # return JsonResponse({'generated_script': generated_script})
+    return JsonResponse({'generated_script': script_to_show, 'image_prompts': image_prompts})
 
 
 # API DALL-E
@@ -70,7 +119,7 @@ def generate_images(request):
                 # Llamar a la API de DALL·E para generar imágenes
                 respuesta = openai.Image.create(
                     prompt=edited_script,
-                    n=4,
+                    n=10,
                     size="1024x1024",
                     response_format="b64_json"  # Solicitar respuesta en formato binario JSON
                 )
@@ -154,7 +203,8 @@ def generate_images(request):
     return JsonResponse({"error": "Método no permitido"}, status=405)
 
 
-''''
+'''
+
 # Miniaturas de las imagenes (thumbnails)
 
 def create_thumbnail(image_path):
@@ -212,6 +262,95 @@ def create_thumbnail(image_path):
 # Generacion de video
 
 def generate_video(request):
+    image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
+
+    # Crea una lista de los nombres de las imágenes en el directorio y las ordena
+    image_filenames = sorted([filename for filename in os.listdir(image_dir) if filename.endswith('.png')])
+
+
+    # Crear una lista de funciones y argumentos
+    effects = [
+        (transitions.slide_in, 1, 'right'),
+        (transitions.slide_out, 1, 'left'),
+        (transitions.fadein, 1),
+        (transitions.fadeout, 1),
+        (vfx.invert_colors,),  # No hay argumentos extra para esta función
+        (vfx.painting, 1)
+    ]
+
+    print(transitions.slide_in)  # Debería imprimir algo que indique que es una función, no un módulo
+
+    clips = []
+    for filename in os.listdir(image_dir):
+        if filename.endswith('.png'):
+            img_path = os.path.join(image_dir, filename)
+            clip = ImageClip(img_path, duration=4)
+
+            # Aplicar efecto de desvanecimiento (1s fadein y 1s fadeout)
+            clip = clip.fadein(1).fadeout(1)
+
+            # Efectos y Transiciones
+            transition_func, *transition_args = random.choice(effects)  # efectos definidos previamente
+            clip = clip.fx(transition_func, *transition_args)
+
+            # Aplicar "zoom" - cambiar tamaño
+            clip = clip.fx(vfx.resize, newsize=[dim * 1.2 for dim in clip.size])
+
+            clips.append(clip)
+
+    # Concatenar y Exportar
+    final_clip = concatenate_videoclips(clips, method="compose")
+    video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos', 'generated_videos',
+                              'video_final.mp4')
+    final_clip.write_videofile(video_path, codec="libx264", fps=24)
+
+    return JsonResponse({'videoPath': video_path})
+
+'''
+def generate_video(request):
+    image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
+
+    # Crea una lista de los nombres de las imágenes en el directorio y las ordena
+    image_filenames = sorted([filename for filename in os.listdir(image_dir) if filename.endswith('.png')])
+
+
+    # Crear una lista de funciones y argumentos
+    effects = [
+        (transitions.slide_in, 1, 'right'),
+        (transitions.slide_out, 1, 'left'),
+        (transitions.fadein, 1),
+        (transitions.fadeout, 1),
+        (vfx.invert_colors,),  # No hay argumentos extra para esta función
+        (vfx.painting, 1)
+    ]
+
+    print(transitions.slide_in)  # Debería imprimir algo que indique que es una función, no un módulo
+
+    clips = []
+    for filename in image_filenames:
+        clip = ImageClip(os.path.join(image_dir, filename)).set_duration(2)
+
+        # Elegir una transición al azar de la lista
+        transition_func, *transition_args = random.choice(effects)
+
+        # Aplicar la transición a la imagen
+        clip = clip.fx(transition_func, *transition_args)
+
+        clips.append(clip)
+
+    # Concatenar los clips con un desvanecimiento entre cada uno
+    final_clip = concatenate_videoclips(clips, method="compose", padding=-1)
+
+    video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos', 'generated_videos',
+                              'video_final.mp4')
+    final_clip.write_videofile(video_path, codec="libx264", fps=24)
+
+    return JsonResponse({'videoPath': video_path})
+
+
+
+
+def generate_video(request):
     # Obtén la ruta del directorio donde se almacenan las imágenes generadas
     image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
 
@@ -226,13 +365,19 @@ def generate_video(request):
     # clips = [ImageClip(image).set_duration(2) for image in images]
 
     clip1 = ImageClip(os.path.join(image_dir, "imagen_0_thumbnail.png")).set_duration(4)
-    clip2 = ImageClip(os.path.join(image_dir, "imagen_1_thumbnail.png")).set_duration(8)
-    clip3 = ImageClip(os.path.join(image_dir, "imagen_2_thumbnail.png")).set_duration(12)
-    clip4 = ImageClip(os.path.join(image_dir, "imagen_3_thumbnail.png")).set_duration(16)
+    clip2 = ImageClip(os.path.join(image_dir, "imagen_1_thumbnail.png")).set_duration(2)
+    clip3 = ImageClip(os.path.join(image_dir, "imagen_2_thumbnail.png")).set_duration(3)
+    clip4 = ImageClip(os.path.join(image_dir, "imagen_3_thumbnail.png")).set_duration(4)
+    clip5 = ImageClip(os.path.join(image_dir, "imagen_4_thumbnail.png")).set_duration(2)
+    clip6 = ImageClip(os.path.join(image_dir, "imagen_5_thumbnail.png")).set_duration(2)
+    clip7 = ImageClip(os.path.join(image_dir, "imagen_6_thumbnail.png")).set_duration(1)
+    clip8 = ImageClip(os.path.join(image_dir, "imagen_7_thumbnail.png")).set_duration(4)
+    clip9 = ImageClip(os.path.join(image_dir, "imagen_8_thumbnail.png")).set_duration(2)
+    clip10 = ImageClip(os.path.join(image_dir, "imagen_9_thumbnail.png")).set_duration(4)
 
     # Concatena los clips
     # final_clip = concatenate_videoclips(clips)
-    final_clip = concatenate_videoclips([clip1, clip2, clip3, clip4])
+    final_clip = concatenate_videoclips([clip1, clip2, clip3, clip4, clip5, clip6, clip7, clip8, clip9, clip10])
 
     # Define la ruta donde se guardará el video final
     video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos', 'generated_videos',
@@ -242,6 +387,8 @@ def generate_video(request):
     final_clip.write_videofile(video_path, codec="libx264", fps=24)
 
     return JsonResponse({'videoPath': video_path})
+
+'''
 
 
 # Eliminar video
