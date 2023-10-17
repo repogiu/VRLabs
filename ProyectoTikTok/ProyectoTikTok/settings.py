@@ -121,6 +121,19 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'video_tiktok', 'static')]
 
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+# Tiempo de Vida de la Sesión
+SESSION_COOKIE_AGE = 1200  # 20 minutos, por defecto sera de 2 semanas
+# Hacer que las sesiones caduquen cuando el usuario cierre el navegador
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# Si tu aplicación usa HTTPS (en producción),
+# asegura que las cookies de sesión solo se transmitan a través de conexiones seguras:
+# SESSION_COOKIE_SECURE = True
+
+
+
+
+
 
 # Activar en entorno de producción: ejecutar python manage.py collectstaticpara que Django recoja todos sus archivos estáticos y los coloque en la carpeta collected_static.
 # STATICFILES_DIRS = [BASE_DIR / "static"]
