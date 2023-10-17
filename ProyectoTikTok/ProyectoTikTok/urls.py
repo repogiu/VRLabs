@@ -25,8 +25,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
     path('generate_script/', views.generate_script, name='generate_script'),
+    path('split_prompts/', views.split_prompts, name='split_prompts'),
     path('generate_images/', views.generate_images, name='generate_images'),
     path('generate_video/', views.generate_video, name='generate_video'),
+    path('texto_a_voz/', views.texto_a_voz, name='texto_a_voz'),
+    path('generate_voz/', views.generate_voz, name='generate_voz'),
     path('delete_video/', views.delete_video, name='delete_video'),
 
 ]

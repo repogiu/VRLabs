@@ -115,8 +115,8 @@
                                     <h6 class="font-weight-bold mb-0">Tu video</h6>
                                   </div>
                                   <div class="card-body text-center">
-                                    <video width="270" height="480" controls>
-                                    <source src="{% static 'video_tiktok/videos/generated_videos/video_final.mp4' %}" type="video/mp4">
+                                    <video id="videoPlayer" width="270" height="480" controls>
+                                    <source src="{% static 'video_tiktok/videos/generated_videos/video_audio.mp4' %}" type="video/mp4">
 
 
                                     Tu navegador no soporta la etiqueta de video.
@@ -125,7 +125,7 @@
                                   </div>
                                   <!-- Botones debajo del reproductor de video -->
                                   <div class="mt-3 mb-3 d-flex justify-content-center">
-                                      <button class="btn btn-secondary mr-2" onclick="handleButtonClick()">Intentar de nuevo</button>
+                                      <button class="btn btn-secondary mr-2" onclick="generateNewVideo()">Intentar de nuevo</button>
                                       <!-- <button class="btn btn-primary">Descargar video</button> -->
                                       <a href="{% static 'video_tiktok/videos/generated_videos/video_final.mp4' %}" download class="btn btn-primary">Descargar video</a>
 
@@ -202,10 +202,23 @@
                                     <div class="form-group">
                                         <label for="voiceSelection">Selecciona una voz</label>
                                         <select class="form-control" id="voiceSelection">
-                                            <option value="voice1">Voz 1</option>
-                                            <option value="voice2">Voz 2</option>
+                                            <option value="es-MX-BeatrizNeural">es-MX-BeatrizNeural</option>
+                                            <option value="es-MX-CandelaNeural">es-MX-CandelaNeural</option>
+                                            <option value="es-MX-CarlotaNeural">es-MX-CarlotaNeural</option>
+                                            <option value="es-MX-LarissaNeural">es-MX-LarissaNeural</option>
+                                            <option value="es-MX-MarinaNeural">es-MX-MarinaNeural</option>
+                                            <option value="es-MX-NuriaNeural">es-MX-NuriaNeural</option>
+                                            <option value="es-MX-RenataNeural">es-MX-RenataNeural</option>
+                                            <option value="es-MX-CecilioNeural">es-MX-CecilioNeural</option>
+                                            <option value="es-MX-GerardoNeural">es-MX-GerardoNeural</option>
+                                            <option value="es-MX-LibertoNeural">es-MX-LibertoNeural</option>
+                                            <option value="es-MX-LucianoNeura">es-MX-LucianoNeural</option>
+                                            <option value="es-MX-PelayoNeural">es-MX-PelayoNeural</option>
+                                            <option value="es-MX-YagoNeural">es-MX-YagoNeural</option>
                                         </select>
                                     </div>
+                                    <button id="generateAudioBtn" class="btn btn-primary">Generar voz</button>
+
                                     <div class="d-flex justify-content-center mt-3">
                                         <button id="generateVideoBtn" class="btn btn-primary w-50">Generar video</button>
 
@@ -266,20 +279,20 @@
             });
         }
     </script>
-<script>
+
+    <script>
     function generateImages() {
         // Obtener el valor del guion generado, que el usuario puede haber editado
         const editedScript = $('#generatedScript').val();
 
         // Modal
-
         $("#progressModal").modal('show');
         $("#progressText").text("Generando imágenes...");
 
         // Enviar una solicitud POST a tu endpoint de Django para generar las imágenes
         $.ajax({
             type: 'POST',
-            url: '{% url "generate_images" %}',
+            url: '{% url "split_prompts" %}',
             data: {
                 editedScript: editedScript,
                 csrfmiddlewaretoken: $('input[name=csrfmiddlewaretoken]').val()
@@ -290,55 +303,16 @@
                 // Limpiar cualquier imagen anteriormente mostrada
                 $('#imagesContainer').empty();
 
-                // una vez que recibas las imágenes o un error, oculta el modal:
+                // Una vez que recibas las imágenes o un error, oculta el modal:
                 $("#progressModal").modal('hide');
 
                 // Verificar si la respuesta contiene las rutas de las imágenes
                 if (response.imagePaths && response.imagePaths.length > 0) {
-                    // Iterar sobre las rutas de las imágenes y mostrarlas en la página
-                    response.imagePaths.forEach(function(imageObject) {
-                        console.log(imageObject); // Imprime el valor de imageObject
-
-                        // Agregar timestamp para evitar problemas de caché
-                        //const timestamp = new Date().getTime();
-
-                        // Accede a las propiedades image y thumbnail del objeto
-                        //const imagePath = imageObject.image;
-                        //const thumbnailPath = imageObject.thumbnail;
-                        //const thumbnailPath = imageObject.thumbnail + '?' + timestamp;
-
-                        // Crear un elemento de imagen
-                        const img = $('<img />', {
-                            src: imagePath,
-                            alt: 'Imagen generada'
-                        });
-
-                        // Crear un elemento de miniatura
-                        //const thumbnail = $('<img />', {
-                        //    src: thumbnailPath,
-                        //    alt: 'Miniatura'
-                        //});
-
-                        // Añadir el elemento de imagen y de miniatura al contenedor de imágenes
-                        //$('#imagesContainer').append(thumbnail);
-                        $('#imagesContainer').append(img);
-
-                    });
-
-                    // Luego de que todas las imágenes se han agregado:
-                    // La función $("#progressText").text("...");
-                    // selecciona el elemento con el ID progressText
-                    // (que se encuentra dentro de tu modal) y
-                    // cambia su contenido de texto al valor que le pasa entre paréntesis,
-                    // en este caso "Imágenes generadas con éxito!".
                     $("#progressText").text("Imágenes generadas con éxito!");
-
-                    //  el modal se ocultará automáticamente después de 2 segundos.
+                    // El modal se ocultará automáticamente después de 2 segundos.
                     setTimeout(function() {
                         $('#progressModal').modal('hide');
                     }, 2000); // 2000 milisegundos = 2 segundos
-
-
                 } else {
                     // Mostrar un mensaje si no se encontraron imágenes
                     console.log('No se generaron imágenes');
@@ -350,11 +324,12 @@
             }
         });
     }
-    document.addEventListener("DOMContentLoaded", function() {
-        // guardado en blog de notas
-    });
 
+    document.addEventListener("DOMContentLoaded", function() {
+        // Guardado en bloc de notas
+    });
 </script>
+
 
 <script type="text/javascript">
 $(document).ready(function() {
@@ -368,6 +343,14 @@ $(document).ready(function() {
             success: function(response) {
                 // Aquí puedes manejar la respuesta, por ejemplo, mostrar un mensaje de éxito
                 alert("Video generado con éxito!");
+
+                // Si la respuesta incluye la ruta del video, actualiza el reproductor
+                if (response.videoPath) {
+                    const videoPlayer = $('video')[0]; // Asumiendo que solo tienes un elemento <video> en tu página
+                    videoPlayer.src = response.videoPath;
+                    videoPlayer.load(); // Recargar el reproductor con la nueva fuente
+                }
+
             },
             error: function(error) {
                 // Manejo de errores
@@ -379,25 +362,59 @@ $(document).ready(function() {
 </script>
 
 <script>
-    function handleButtonClick() {
+    function generateNewVideo() {
     $.ajax({
         type: "POST",
-        url: "/delete_video/",
+        url: "/generate_video/",
         data: {
-            'video_path': 'ruta/del/video/final_video.mp4',
             'csrfmiddlewaretoken': '{{ csrf_token }}'
         },
         success: function(response) {
-            if (response.success) {
-                alert('Video eliminado exitosamente!');
+            if (response.videoPath) {
+                // Actualiza el src del video y recarga el reproductor de video.
+                $('#videoPlayer source').attr('src', response.videoPath);
+                $('#videoPlayer')[0].load();
+                alert('Video generado exitosamente!');
             } else {
-                alert('Error al eliminar el video.');
+                alert('Error al generar el video.');
             }
         }
     });
 }
 
 </script>
+
+<script>
+    $('#generateAudioBtn').on('click', generateAudio);
+
+    function generateAudio() {
+        // Obtener el valor del guion generado, que el usuario puede haber editado
+        const editedScript = $('#generatedScript').val();
+         // Obtener la voz seleccionada
+        const selectedVoice = $('#voiceSelection').val();
+        $.ajax({
+            type: "POST",
+            url: "/texto_a_voz/",
+            data: {
+                'texto': editedScript,
+                'voice': selectedVoice,
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                if (response.status === 'success') {
+                    alert('Audio generado exitosamente!');
+                } else {
+                    alert('Hubo un error al generar el audio.');
+                }
+            },
+            error: function(error) {
+                alert('Error de comunicación con el servidor.');
+            }
+        });
+    }
+</script>
+
+
 
 
 </body>

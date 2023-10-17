@@ -5,7 +5,7 @@ from django.shortcuts import render
 from django.templatetags.static import static
 from django.conf import settings
 from django.http import JsonResponse
-from ProyectoTikTok.config import OPENAI_API_KEY
+from ProyectoTikTok.config import OPENAI_API_KEY, PLAY_API_KEY, PLAY_USER
 import openai
 
 # Librerias para descargar imagenes
@@ -20,11 +20,18 @@ from moviepy.video.compositing import transitions
 import random
 from moviepy.editor import *
 
+# Libreria para audio
+import time
+# Librerias para audio-videp
+import numpy as np  # np es una biblioteca para la computación numérica en Python
+from moviepy.audio.AudioClip import AudioArrayClip  # crear un clip de audio a partir de una matriz
 
 
 # pip install moviepy
 # pip install requests
 # pip install Pillow
+# falta uno de efectos y transiciones
+# pip install numpy moviepy
 
 
 # Funcion de vista
@@ -74,31 +81,45 @@ def generate_script(request):
         generated_response = resultado.choices[0].text.strip()
         print(generated_response)
 
-        # Buscamos el delimitador "Prompts para Dall-E:" para dividir la respuesta
-        delimiter = "Prompts para Dall-E:"
-        if delimiter in generated_response:
-            parts = generated_response.split(delimiter, 1)
+        return JsonResponse({'generated_script': generated_response})
 
-            # La primera parte contendrá el guion
-            script_to_show = parts[0].replace("Guion:", "").strip()
-            script_to_show = script_to_show.replace("Guión:", "").strip()
+    return JsonResponse({'error': 'Método no permitido'}, status=405)
 
-            # La segunda parte contendrá los prompts
-            image_prompts = parts[1].strip().split('\n')
-        else:
-            # Manejo del caso donde el delimitador no se encuentra
-            # Podrías, por ejemplo, devolver un error o procesar la respuesta de alguna otra manera
-            script_to_show = "Error: No se encontró el delimitador en la respuesta."
-            image_prompts = []
 
-        # El guión para mostrar al usuario estará en la primera parte
-        # generated_script = parts[0].strip()
+# Procesamiento de la respuesta:
+def split_prompts(request):
+    generated_response = request.POST.get('editedScript')
+    delimiter = "Prompts para Dall-E:"
+    print(repr(generated_response))
 
-        # Las descripciones para las imágenes estarán en la segunda parte
-        # image_prompts = parts[1].strip().split('\n')
+    if delimiter in generated_response:
+        # Dividir la respuesta en guion y prompts usando el delimitador
+        parts = generated_response.split(delimiter, 1)
 
-    # return JsonResponse({'generated_script': generated_script})
-    return JsonResponse({'generated_script': script_to_show, 'image_prompts': image_prompts})
+        # Procesar el guión
+        script_to_show = parts[0].replace("Guion:", "").strip()
+        script_to_show = script_to_show.replace("Guión:", "").strip()
+
+        # Procesar los prompts
+        image_prompts = parts[1].strip().split('\n')
+        image_prompts = [prompt.strip() for prompt in image_prompts if prompt.strip() != ""]
+
+        # Ahora, procesar los prompts para generar imágenes usando DALL·E
+        # response = generate_images(image_prompts)
+        response = generate_images(request, image_prompts)
+
+        return response  # Esto enviará el JsonResponse de la función `generate_images`
+
+    else:
+        return JsonResponse({'error': "Delimitador no encontrado"})
+
+        # Ahora, procesar los prompts para generar imágenes
+        image_paths = []
+        for prompt in image_prompts:
+            image_path = get_image_from_dalle(prompt)  # Función que envía prompt a DALL·E y obtiene una imagen.
+            image_paths.append(image_path)
+
+    return JsonResponse({'image_prompts': image_prompts})
 
 
 # API DALL-E
@@ -107,126 +128,82 @@ def generate_script(request):
 openai.api_key = OPENAI_API_KEY
 
 
-def generate_images(request):
-    # Comprobar si el método de la solicitud es POST
-    if request.method == "POST":
-        # Obtener el script editado desde la solicitud POST
-        edited_script = request.POST.get('editedScript')
+def generate_images(request, image_prompts):
+    # Inicializar una lista vacia para almacenar todas las rutas de las imágenes
+    all_image_paths = []
 
-        # Verificar si el script editado está presente
-        if edited_script:
-            try:
-                # Llamar a la API de DALL·E para generar imágenes
-                respuesta = openai.Image.create(
-                    prompt=edited_script,
-                    n=10,
-                    size="1024x1024",
-                    response_format="b64_json"  # Solicitar respuesta en formato binario JSON
-                )
+    # Para cada prompt, generar una imagen con DALL·E
+    # se obtiene tanto el índice de prompt de la lista image_prompts como el valor del prompt
+    for index, prompt in enumerate(image_prompts):
+        # contiene las imágenes relacionadas con un prompt particular
+        individual_image_paths = []
+        try:
+            # Llamar a la API de DALL·E para generar 2 imágenes por prompt
+            respuesta = openai.Image.create(
+                prompt=prompt,
+                n=5,
+                size="1024x1024",
+                response_format="b64_json"
+            )
 
-                # Inicializar la lista para almacenar las rutas de las imágenes
-                image_paths = []
+            # Iterar sobre las imágenes en la respuesta
+            for img_index, imagen in enumerate(respuesta['data']):
+                # Obtener la cadena base64 de la imagen Json
+                b64_string = imagen['b64_json']
 
-                # Iterar sobre las imágenes en la respuesta
-                for i, imagen in enumerate(respuesta['data']):
-                    # Obtener la cadena base64 de la imagen
-                    b64_string = imagen['b64_json']
+                # Definir el nombre de la imagen basado en el indice del prompt y el indice de la imagen individual
+                image_file_name = f"imagen_prompt_{index}_img_{img_index}.png"
 
-                    # Definir el nombre del archivo de la imagen
-                    image_file_name = f"imagen_{i}.png"
+                # Definir la ruta donde se guardará la imagen
+                base_dir = settings.BASE_DIR  # obtenemos el directorio base del proyecto
+                # Construimos el camino al directorio donde se guardarán las imágenes generadas.
+                static_dir = os.path.join(base_dir, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
+                # Combinamos el directorio estático con el nombre de archivo de la imagen para obtener el camino
+                # completo donde guardaremos la imagen.
+                image_file_path = os.path.join(static_dir, image_file_name)
 
-                    # Definir la ruta donde se guardará la imagen
-                    # base_dir = os.path.dirname(os.path.abspath(__file__))  # Directorio actual del archivo
-                    base_dir = settings.BASE_DIR  # Directorio base del proyecto
-                    static_dir = os.path.join(base_dir, 'video_tiktok', 'static', 'video_tiktok', 'img',
-                                              'generated_images')
+                # Asegurarse de que el directorio exista. Si no existe, se creará
+                os.makedirs(static_dir, exist_ok=True)
 
-                    image_file_path = os.path.join("video_tiktok/static/video_tiktok/img/generated_images",
-                                                   image_file_name)
-                    image_file_path = os.path.join(static_dir, image_file_name)
+                # Decodificar la cadena base64 y guardar la imagen original
+                with open(image_file_path, "wb") as image_file:
+                    image_file.write(base64.b64decode(b64_string))
 
-                    # Asegurarse de que el directorio exista
-                    os.makedirs(static_dir, exist_ok=True)
+                # Llamamos a la funcion create_thumbnail para crear la miniatura
+                thumbnail_path = create_thumbnail(image_file_path)
 
-                    # Definir la ruta completa del archivo de imagen
-                    # image_file_path = os.path.join(static_dir, image_file_name)
+                # obtenemos la ruta relativa de thumbnail_path (miniatura)
+                rel_thumbnail_path = os.path.relpath(thumbnail_path, os.path.join(settings.BASE_DIR, 'static'))
+                # obtenemos la ruta relativa de image_file_path (imagen original)
+                rel_image_path = os.path.relpath(image_file_path, os.path.join(settings.BASE_DIR, 'static'))
 
-                    # Decodificar la cadena base64 y guardar la imagen
-                    with open(image_file_path, "wb") as image_file:
-                        image_file.write(base64.b64decode(b64_string))
+                # Convertimos las rutas relativas a URLs usando la función static de Django.
+                thumbnail_url = static(rel_thumbnail_path)
+                image_url = static(rel_image_path)
 
-                    # Crear la miniatura
-                    thumbnail_path = create_thumbnail(image_file_path)
+                # Imprimir las URLs en la consola del servidor
+                print("Image URL:", image_url)
+                print("Thumbnail URL:", thumbnail_url)
 
-                    # Obtener la ruta relativa de la miniatura e imagen
-                    rel_thumbnail_path = os.path.relpath(thumbnail_path, os.path.join(settings.BASE_DIR, 'static'))
-                    rel_image_path = os.path.relpath(image_file_path, os.path.join(settings.BASE_DIR, 'static'))
+                # Agregar las URLs de la imagen y la miniatura a la lista individual_image_paths
+                individual_image_paths.append({"image": image_url, "thumbnail": thumbnail_url})
 
-                    # Crear la URL de la miniatura utilizando la etiqueta static de Django
-                    # thumbnail_url = static(thumbnail_path)
-                    thumbnail_url = static(rel_thumbnail_path)
+            # Agregar todas las imágenes generadas para este prompt a la lista general
+            all_image_paths.append(individual_image_paths)
+            request.session['all_image_paths'] = all_image_paths  # Guardar en la sesión
 
-                    # Crear la URL de la imagen utilizando la etiqueta static de Django
+        except Exception as e:
+            # Imprimir la excepción
+            print(f"Error al generar imagen para el prompt: {prompt}")
+            print(e)
+            # Devolver un mensaje de error
+            return JsonResponse({"error": str(e)})
 
-                    # image_url = os.path.join("/static/video_tiktok/img/generated_images",
-                    #                         image_file_name)
-                    # image_url = static(os.path.join("video_tiktok/img/generated_images",
-                    #                                image_file_name))
-
-                    # Crear la URL de la imagen utilizando la etiqueta static de Django
-                    image_url = static(rel_image_path)
-
-                    # Agregar la ruta de la imagen a la lista
-                    # image_paths.append(image_file_path)
-                    # image_paths.append(image_url)
-
-                    # Agregar la ruta de la miniatura a la lista
-                    # image_paths.append(thumbnail_url)
-
-                    # Imprimir las URLs en la consola del servidor
-                    print("Image URL:", image_url)
-                    print("Thumbnail URL:", thumbnail_url)
-
-                    # Agregar las URLs de la imagen y la miniatura a la lista
-                    image_paths.append({"image": image_url, "thumbnail": thumbnail_url})
-
-                # Devolver las rutas de las imágenes en la respuesta JSON
-                return JsonResponse({"imagePaths": image_paths})
-
-            except Exception as e:
-                # Imprimir la excepción
-                print(e)
-                # Devolver un mensaje de error
-                return JsonResponse({"error": str(e)})
-
-    # Devolver un mensaje de error si el método de la solicitud no es POST
-    return JsonResponse({"error": "Método no permitido"}, status=405)
+    # Devolver todas las rutas de las imágenes en la respuesta JSON
+    return JsonResponse({"imagePaths": all_image_paths})
 
 
-'''
-
-# Miniaturas de las imagenes (thumbnails)
-
-def create_thumbnail(image_path):
-    # Tamaño deseado de la miniatura
-    #size = (128, 128)
-    size = (1080, 1920)
-
-    # Abrir la imagen original
-    original_image = Image.open(image_path)
-
-    # Crear la miniatura
-    original_image.thumbnail(size)
-
-    # Guardar la miniatura en el mismo directorio que la imagen original
-    # con un sufijo "_thumbnail" en el nombre del archivo
-    thumbnail_path = image_path.replace('.png', '_thumbnail.png')
-    original_image.save(thumbnail_path)
-
-    return thumbnail_path
-'''
-
-
+# Creamos la miniatura
 def create_thumbnail(image_path):
     # Tamaño deseado de la miniatura
     target_size = (1080, 1920)
@@ -262,133 +239,173 @@ def create_thumbnail(image_path):
 # Generacion de video
 
 def generate_video(request):
-    image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
+    try:
+        image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
 
-    # Crea una lista de los nombres de las imágenes en el directorio y las ordena
-    image_filenames = sorted([filename for filename in os.listdir(image_dir) if filename.endswith('.png')])
+        # Filtrar solo las imágenes que contienen "_thumbnail" en su nombre
+        image_filenames = sorted(
+            [filename for filename in os.listdir(image_dir) if filename.endswith('.png') and "_thumbnail" in filename])
 
+        # Agrupar las imágenes en conjuntos de 2 (puedes cambiar esto a 5 en el futuro)
+        # grouped_images = [image_filenames[i:i + 2] for i in range(0, len(image_filenames), 2)]
+        grouped_images = [image_filenames[i:i + 5] for i in range(0, len(image_filenames), 5)]
 
-    # Crear una lista de funciones y argumentos
-    effects = [
-        (transitions.slide_in, 1, 'right'),
-        (transitions.slide_out, 1, 'left'),
-        (transitions.fadein, 1),
-        (transitions.fadeout, 1),
-        (vfx.invert_colors,),  # No hay argumentos extra para esta función
-        (vfx.painting, 1)
-    ]
+        # Selecciona una sola imagen aleatoriamente de las generadas por cada prompt
+        # selected_images = [random.choice(images_list) for images_list in image_filenames]
 
-    print(transitions.slide_in)  # Debería imprimir algo que indique que es una función, no un módulo
+        # Luego, selecciona una imagen aleatoriamente de cada grupo
+        selected_images = [random.choice(group) for group in grouped_images]
 
-    clips = []
-    for filename in os.listdir(image_dir):
-        if filename.endswith('.png'):
+        # Crear una lista de funciones y argumentos
+        effects = [
+            # Aplica una transición de deslizamiento desde la derecha a la imagen durante un segundo
+            (transitions.slide_in, 1, 'right'),
+            #  Aplica una transición de deslizamiento hacia la izquierda a la imagen durante un segundo.
+            (transitions.slide_out, 1, 'left'),
+            # Aplica una transición de desvanecimiento (aparece gradualmente) a la imagen durante un segundo.
+            (transitions.fadein, 1),
+            # desaparece gradualmente
+            (transitions.fadeout, 1),
+            # Invierte los colores de la imagen.
+            # (vfx.invert_colors,),
+            # Aplica un efecto de pintura a la imagen durante un segundo.
+            (vfx.painting, 1)
+        ]
+
+        clips = []
+        for filename in selected_images:  # Ahora estamos iterando sobre las imágenes seleccionadas
             img_path = os.path.join(image_dir, filename)
-            clip = ImageClip(img_path, duration=4)
-
-            # Aplicar efecto de desvanecimiento (1s fadein y 1s fadeout)
+            if not os.path.exists(img_path):
+                continue  # Si el archivo no existe, continúa con el siguiente
+            clip = ImageClip(img_path, duration=5)
+            # # Aplicar efecto de desvanecimiento (1s fadein y 1s fadeout)
             clip = clip.fadein(1).fadeout(1)
-
             # Efectos y Transiciones
-            transition_func, *transition_args = random.choice(effects)  # efectos definidos previamente
+            transition_func, *transition_args = random.choice(effects)
             clip = clip.fx(transition_func, *transition_args)
-
             # Aplicar "zoom" - cambiar tamaño
             clip = clip.fx(vfx.resize, newsize=[dim * 1.2 for dim in clip.size])
-
             clips.append(clip)
 
-    # Concatenar y Exportar
-    final_clip = concatenate_videoclips(clips, method="compose")
-    video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos', 'generated_videos',
-                              'video_final.mp4')
-    final_clip.write_videofile(video_path, codec="libx264", fps=24)
+        # Concatenar y Exportar
+        final_clip = concatenate_videoclips(clips, method="compose")
+        video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos',
+                                  'generated_videos',
+                                  'video_final.mp4')
+        final_clip.write_videofile(video_path, codec="libx264", fps=24)
 
-    return JsonResponse({'videoPath': video_path})
+        # Define la ruta del audio
+        audio_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'audios',
+                                  'generated_audios', 'audio.mp3')
 
-'''
-def generate_video(request):
-    image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
+        # Una vez que el video está listo, integrarlo con el audio
+        audio_video(video_path, audio_path, video_path)
 
-    # Crea una lista de los nombres de las imágenes en el directorio y las ordena
-    image_filenames = sorted([filename for filename in os.listdir(image_dir) if filename.endswith('.png')])
+        # return JsonResponse({'videoPath': video_path})
+        output_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos',
+                                   'generated_videos', 'video_audio.mp4')
+        return JsonResponse({'videoPath': output_path})
 
-
-    # Crear una lista de funciones y argumentos
-    effects = [
-        (transitions.slide_in, 1, 'right'),
-        (transitions.slide_out, 1, 'left'),
-        (transitions.fadein, 1),
-        (transitions.fadeout, 1),
-        (vfx.invert_colors,),  # No hay argumentos extra para esta función
-        (vfx.painting, 1)
-    ]
-
-    print(transitions.slide_in)  # Debería imprimir algo que indique que es una función, no un módulo
-
-    clips = []
-    for filename in image_filenames:
-        clip = ImageClip(os.path.join(image_dir, filename)).set_duration(2)
-
-        # Elegir una transición al azar de la lista
-        transition_func, *transition_args = random.choice(effects)
-
-        # Aplicar la transición a la imagen
-        clip = clip.fx(transition_func, *transition_args)
-
-        clips.append(clip)
-
-    # Concatenar los clips con un desvanecimiento entre cada uno
-    final_clip = concatenate_videoclips(clips, method="compose", padding=-1)
-
-    video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos', 'generated_videos',
-                              'video_final.mp4')
-    final_clip.write_videofile(video_path, codec="libx264", fps=24)
-
-    return JsonResponse({'videoPath': video_path})
+    except Exception as e:
+        return JsonResponse({"error": str(e)})
 
 
+# Convertir texto a voz
+
+def texto_a_voz(request):
+    texto = request.POST.get('texto')
+    selected_voice = request.POST.get('voice')
+
+    # Procesar para extraer el guion
+    delimiter = "Prompts para Dall-E:"
+    if delimiter in texto:
+        parts = texto.split(delimiter, 1)
+        script = parts[0].replace("Guion:", "").strip()
+        script = script.replace("Guión:", "").strip()
+
+    API_KEY = PLAY_API_KEY
+    HEADERS = {
+        'Authorization': 'Bearer ' + API_KEY,
+        'Content-Type': 'application/json',
+        "accept": "application/json",
+        "X-User-ID": PLAY_USER
+    }
+    url = "https://play.ht/api/v1/convert"
+
+    payload = {
+        "content": [script],
+        "voice": selected_voice
+    }
+
+    response = requests.post(url, json=payload, headers=HEADERS)
+    data = response.json()  # Convertir la respuesta en un objeto JSON
+    transcriptionId = data.get('transcriptionId')
+
+    print(data)
+
+    if transcriptionId:
+        generate_voz(transcriptionId)
+        return JsonResponse({"status": "success", "transcriptionId": transcriptionId})
+    else:
+        return JsonResponse({"status": "error"}, status=400)
 
 
-def generate_video(request):
-    # Obtén la ruta del directorio donde se almacenan las imágenes generadas
-    image_dir = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'img', 'generated_images')
+def generate_voz(transcriptionId):
+    url = f"https://play.ht/api/v1/articleStatus?transcriptionId={transcriptionId}"
 
-    # Crea una lista de las rutas de las imágenes en el directorio
-    # images = [os.path.join(image_dir, filename) for filename in os.listdir(image_dir) if filename.endswith('.png')]
-    imagenes = [os.path.join(image_dir, archivo) for archivo in os.listdir(image_dir)]
+    headers = {
+        "accept": "application/json",
+        "Authorization": "Bearer 28c8e53694d047d6bf008eea60c5ff6f",
+        "X-User-ID": PLAY_USER
+    }
 
-    # Ordena la lista de imágenes si es necesario
-    # images.sort()
+    for _ in range(10):  # Intentar hasta 10 veces
+        response = requests.get(url, headers=headers)
+        data = response.json()
 
-    # Crea ImageClips individuales para cada imagen y especifica su duración
-    # clips = [ImageClip(image).set_duration(2) for image in images]
+        # Si la conversión ha finalizado
+        if data.get('converted'):
+            audio_url = data.get('audioUrl')
+            if audio_url:
+                audio_response = requests.get(audio_url)
+                audio_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'audios',
+                                          'generated_audios', 'audio.mp3')
+                with open(audio_path, 'wb') as f:
+                    f.write(audio_response.content)
+                print("Audio descargado con éxito.")
+                return JsonResponse({"status": "success", "transcriptionId": transcriptionId, "audioPath": audio_path})
+        else:
+            time.sleep(5)  # Esperar 5 segundos antes del próximo intento
 
-    clip1 = ImageClip(os.path.join(image_dir, "imagen_0_thumbnail.png")).set_duration(4)
-    clip2 = ImageClip(os.path.join(image_dir, "imagen_1_thumbnail.png")).set_duration(2)
-    clip3 = ImageClip(os.path.join(image_dir, "imagen_2_thumbnail.png")).set_duration(3)
-    clip4 = ImageClip(os.path.join(image_dir, "imagen_3_thumbnail.png")).set_duration(4)
-    clip5 = ImageClip(os.path.join(image_dir, "imagen_4_thumbnail.png")).set_duration(2)
-    clip6 = ImageClip(os.path.join(image_dir, "imagen_5_thumbnail.png")).set_duration(2)
-    clip7 = ImageClip(os.path.join(image_dir, "imagen_6_thumbnail.png")).set_duration(1)
-    clip8 = ImageClip(os.path.join(image_dir, "imagen_7_thumbnail.png")).set_duration(4)
-    clip9 = ImageClip(os.path.join(image_dir, "imagen_8_thumbnail.png")).set_duration(2)
-    clip10 = ImageClip(os.path.join(image_dir, "imagen_9_thumbnail.png")).set_duration(4)
+    print("No se pudo obtener la URL del audio después de varios intentos.")
+    return JsonResponse(
+        {"status": "error", "message": "No se pudo obtener la URL del audio después de varios intentos."}, status=400)
 
-    # Concatena los clips
-    # final_clip = concatenate_videoclips(clips)
-    final_clip = concatenate_videoclips([clip1, clip2, clip3, clip4, clip5, clip6, clip7, clip8, clip9, clip10])
 
-    # Define la ruta donde se guardará el video final
-    video_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos', 'generated_videos',
-                              'video_final.mp4')
+def audio_video(video_path, audio_path, output_path):
+    print("Cargando clips de video y audio...")
+    video = VideoFileClip(video_path)
+    audio = AudioFileClip(audio_path)
 
-    # Guarda el video final en un archivo
-    final_clip.write_videofile(video_path, codec="libx264", fps=24)
+    print(f"Duración del video: {video.duration}")
+    print(f"Duración del audio: {audio.duration}")
 
-    return JsonResponse({'videoPath': video_path})
+    # Si el audio es más corto que el video, añadir silencio al final del audio
+    if audio.duration < video.duration:
+        silence_duration = video.duration - audio.duration
+        silence = AudioArrayClip(np.array([[0, 0]]), fps=44100).set_duration(
+            silence_duration)  # Genera un clip de silencio
+        audio = concatenate_audioclips([audio, silence])
 
-'''
+    # Si el audio es más largo que el video, repetir el video hasta que alcance la duración del audio
+    elif audio.duration > video.duration:
+        video_repeat_count = int(audio.duration // video.duration) + 1
+        video = concatenate_videoclips([video] * video_repeat_count)
+
+    video_with_audio = video.set_audio(audio)
+    output_path = os.path.join(settings.BASE_DIR, 'video_tiktok', 'static', 'video_tiktok', 'videos',
+                               'generated_videos', 'video_audio.mp4')
+    video_with_audio.write_videofile(output_path, codec='libx264')
 
 
 # Eliminar video
