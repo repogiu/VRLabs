@@ -217,7 +217,18 @@
                                             <option value="es-MX-YagoNeural">es-MX-YagoNeural</option>
                                         </select>
                                     </div>
-                                    <button id="generateAudioBtn" class="btn btn-primary">Generar voz</button>
+                                    <button id="generateAudioBtn" class="btn btn-primary mb-3">Generar voz</button>
+                                    <div class="form-group">
+                                        <label for="musicSelection">Selecciona un sonido</label>
+                                        <select class="form-control" id="musicSelection">
+                                            <option value="ES_Empower_Osoku">ES_Empower_Osoku</option>
+                                            <option value="ES_Fight_Club_Cushy">ES_Fight_Club_Cushy</option>
+                                            <option value="ES_Neon_Lights_Neon_Dreams_Forever_Sunset">ES_Neon_Lights_Neon_Dreams_Forever_Sunset</option>
+                                            <option value="ES_Sleepy_Hungry_baegel">ES_Sleepy_Hungry_baegel</option>
+                                            <option value="ES_Streamer_Bonkers_Beat_Club">ES_Streamer_Bonkers_Beat_Club</option>
+                                            <option value="ES_SUPRA_STRLGHT">ES_SUPRA_STRLGHT</option>
+                                        </select>
+                                    </div>
 
                                     <div class="d-flex justify-content-center mt-3">
                                         <button id="generateVideoBtn" class="btn btn-primary w-50">Generar video</button>
@@ -293,6 +304,7 @@
         $.ajax({
             type: 'POST',
             url: '{% url "split_prompts" %}',
+            //url: '{% url "generate_images" %}',
             data: {
                 editedScript: editedScript,
                 csrfmiddlewaretoken: $('input[name=csrfmiddlewaretoken]').val()
@@ -334,14 +346,19 @@
 <script type="text/javascript">
 $(document).ready(function() {
     $("#generateVideoBtn").click(function() {
+        // Recupera el valor seleccionado del menú desplegable
+        const selectedMusic = $("#musicSelection").val();
+        console.log("Música seleccionada:", selectedMusic);
+
         $.ajax({
             type: "POST",
             url: "/generate_video/",
             data: {
+                'music': selectedMusic,
                 csrfmiddlewaretoken: "{{ csrf_token }}"
             },
             success: function(response) {
-                // Aquí puedes manejar la respuesta, por ejemplo, mostrar un mensaje de éxito
+                // Mensaje de éxito
                 alert("Video generado con éxito!");
 
                 // Si la respuesta incluye la ruta del video, actualiza el reproductor
@@ -414,8 +431,20 @@ $(document).ready(function() {
     }
 </script>
 
+<script>
+    // Almacenar datos cuando el usuario escribe
+    $('#videoTitle, #videoScript, #generatedScript').on('input', function() {
+        localStorage.setItem(this.id, this.value);
+    });
 
+    // Recuperar datos al cargar la página
+    $(document).ready(function() {
+        $('#videoTitle').val(localStorage.getItem('videoTitle'));
+        $('#videoScript').val(localStorage.getItem('videoScript'));
+        $('#generatedScript').val(localStorage.getItem('generatedScript'));
+    });
 
+</script>
 
 </body>
 
